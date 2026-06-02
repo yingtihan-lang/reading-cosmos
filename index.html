@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Reading Cosmos</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;1,400&family=Outfit:wght@300;400;500;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="glitch.css" />
+  <link rel="stylesheet" href="styles.css" />
+  <script src="https://cdn.jsdelivr.net/npm/d3@7/dist/d3.min.js"></script>
+  <script src="https://cdn.amcharts.com/lib/5/index.js"></script>
+  <script src="https://cdn.amcharts.com/lib/5/map.js"></script>
+  <script src="https://cdn.amcharts.com/lib/5/geodata/worldLow.js"></script>
+  <script src="https://cdn.amcharts.com/lib/5/themes/Animated.js"></script>
+</head>
+<body>
+  <div class="cosmos-bg" aria-hidden="true">
+    <div class="stars stars--far"></div>
+    <div class="stars stars--mid"></div>
+    <div class="stars stars--near"></div>
+    <div class="nebula nebula--violet"></div>
+    <div class="nebula nebula--cyan"></div>
+  </div>
+
+  <div class="app-shell">
+    <header class="top-nav">
+      <div class="brand">
+        <span class="brand__glyph" aria-hidden="true">✦</span>
+        <h1 class="brand__title">Reading Cosmos</h1>
+      </div>
+
+      <div class="book-input-wrap">
+        <div class="book-input-field">
+          <label class="visually-hidden" for="book-title">输入书名</label>
+          <input
+            id="book-title"
+            class="book-input"
+            type="text"
+            placeholder="输入书名（可加作者）"
+            autocomplete="off"
+          />
+          <button
+            id="book-submit"
+            class="book-submit"
+            type="button"
+            aria-label="提交书名"
+          >
+            <svg class="book-submit__icon" width="16" height="16" viewBox="0 0 24 24" aria-hidden="true">
+              <path
+                fill="currentColor"
+                d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"
+              />
+            </svg>
+          </button>
+        </div>
+        <p id="book-feedback" class="book-feedback" role="status" aria-live="polite" hidden></p>
+      </div>
+    </header>
+
+    <div class="tab-nav-row">
+      <nav class="tab-nav" role="tablist" aria-label="主视图">
+        <button
+          class="tab-nav__btn is-active"
+          role="tab"
+          id="tab-culture"
+          aria-selected="true"
+          aria-controls="panel-culture"
+          data-tab="culture"
+          type="button"
+        >
+          <span class="tab-nav__icon" aria-hidden="true">🌍</span>
+          Culture Journey
+        </button>
+        <button
+          class="tab-nav__btn"
+          role="tab"
+          id="tab-galaxy"
+          aria-selected="false"
+          aria-controls="panel-galaxy"
+          data-tab="galaxy"
+          type="button"
+        >
+          <span class="tab-nav__icon" aria-hidden="true">✧</span>
+          Idea Galaxy
+        </button>
+        <span class="tab-nav__indicator" aria-hidden="true"></span>
+      </nav>
+      <button
+        type="button"
+        id="usage-guide-btn"
+        class="tab-nav__help-btn"
+        aria-label="使用说明"
+        title="使用说明"
+      >
+        ？
+      </button>
+    </div>
+
+    <main class="main-content">
+      <!-- Culture Journey: 世界地图 -->
+      <section
+        id="panel-culture"
+        class="tab-panel is-active"
+        role="tabpanel"
+        aria-labelledby="tab-culture"
+        data-panel="culture"
+      >
+        <div class="map-stage" data-panel-resize>
+          <div class="map-stage__frame panel-resize-main">
+            <div id="culture-map-chart" class="culture-map-chart" aria-label="世界地图"></div>
+            <button
+              type="button"
+              id="culture-map-reset-btn"
+              class="culture-map-reset-btn"
+              aria-label="复位地图视角，聚焦中国"
+              title="复位视角"
+            >
+              ⊙
+            </button>
+          </div>
+
+          <div
+            id="culture-panel-resizer"
+            class="panel-resizer"
+            role="separator"
+            aria-orientation="vertical"
+            aria-label="调整侧栏宽度"
+            tabindex="0"
+          ></div>
+
+          <aside class="map-sidebar panel-resize-right">
+            <div class="glass-card culture-footprints">
+              <h3 class="glass-card__title">阅读足迹</h3>
+              <p id="map-footprints-summary" class="glass-card__summary culture-footprints__stats">
+                已标记 0 个国家 / 共 0 本书
+              </p>
+              <div id="culture-footprints-list" class="culture-footprints__list">
+                <p class="culture-footprints__empty">尚无阅读记录</p>
+              </div>
+            </div>
+          </aside>
+        </div>
+      </section>
+
+      <!-- Idea Galaxy: 概念星系 -->
+      <section
+        id="panel-galaxy"
+        class="tab-panel"
+        role="tabpanel"
+        aria-labelledby="tab-galaxy"
+        data-panel="galaxy"
+        hidden
+      >
+        <div class="galaxy-stage" data-panel-resize>
+          <div id="idea-main" class="galaxy-stage__canvas panel-resize-main">
+            <svg id="galaxy-graph" class="galaxy-graph" aria-label="概念星系图"></svg>
+          </div>
+
+          <div
+            id="galaxy-panel-resizer"
+            class="panel-resizer"
+            role="separator"
+            aria-orientation="vertical"
+            aria-label="调整侧栏宽度"
+            tabindex="0"
+          ></div>
+
+          <aside id="idea-sidebar" class="galaxy-sidebar panel-resize-right">
+            <div class="glass-card galaxy-concepts-panel">
+              <h3 class="glass-card__title">概念概览</h3>
+              <p id="galaxy-concepts-summary" class="glass-card__summary galaxy-concepts__stats">
+                共 0 个概念 / 0 本书
+              </p>
+              <div id="galaxy-concepts-list" class="galaxy-concepts__list">
+                <p class="galaxy-concepts__empty">尚无概念</p>
+              </div>
+            </div>
+          </aside>
+        </div>
+      </section>
+    </main>
+
+    <footer class="app-footer">
+      <span>自由探索你的思想宇宙 | © eating出品</span>
+    </footer>
+  </div>
+
+  <div id="status-toast" class="status-toast" role="status" aria-live="polite" style="display: none">
+    <div class="status-toast__panel">
+      <span class="status-toast__glitch-border" aria-hidden="true"></span>
+      <div id="status-analyzing" class="status-toast__body">
+        <p class="status-toast__line status-toast__line--blink">识别中...</p>
+      </div>
+      <div id="status-success" class="status-toast__body" hidden>
+        <p id="status-success-text" class="status-toast__line status-toast__line--success"></p>
+      </div>
+    </div>
+  </div>
+
+  <div id="galaxy-new-concept-toast" class="galaxy-new-concept-toast" hidden></div>
+
+  <div id="usage-guide-modal" class="usage-guide-modal" hidden>
+    <div class="usage-guide-modal__backdrop" aria-hidden="true"></div>
+    <div
+      class="usage-guide-modal__dialog"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="usage-guide-title"
+    >
+      <button
+        type="button"
+        class="usage-guide-modal__close"
+        aria-label="关闭使用说明"
+      >
+        ✕
+      </button>
+      <div class="usage-guide-modal__body">
+        <section class="usage-guide-modal__section">
+          <h2 id="usage-guide-title" class="usage-guide-modal__h1">For what?</h2>
+          <p>大多数阅读软件记录的是数量。它们告诉你：今年读了多少本书，阅读了多少小时，划了多少条笔记。</p>
+          <p>但阅读不只是统计数字。</p>
+          <p>每读一本书我都会暂时进入另一个地方。有时是维多利亚时代的伦敦，有时是二十世纪的上海。</p>
+          <p>而有些书，并不带我前往某个地方。它们带我进入另一种思考方式——怎么理解权力，怎么看见「看不见的」文化资本，怎么用现代性理论解释日常生活。阅读也是一种思想上的迁徙。</p>
+          <p>Reading Cosmos 想记录的，不是「你读过什么书」，而是「你的精神世界曾经去过哪里」。</p>
+        </section>
+
+        <hr class="usage-guide-modal__divider" />
+
+        <section class="usage-guide-modal__section">
+          <h2 class="usage-guide-modal__h1">How does it work?</h2>
+          <p>每本书在录入时，AI 会自动判断它属于哪种阅读体验：</p>
+          <h3 class="usage-guide-modal__h2">Culture Journey，如果这本书主要带你进入某个国家或地区的文化、历史与人的生活。</h3>
+          <h3 class="usage-guide-modal__h2">Idea Galaxy，如果这本书主要给你一种理解世界的分析框架或思想视角。</h3>
+          <p>一本书只会进入其中一个系统，这样可以避免重复，也让两种阅读体验保持清晰。如果 AI 判断有误，你可以右键书名手动修改。</p>
+        </section>
+
+        <hr class="usage-guide-modal__divider" />
+
+        <section class="usage-guide-modal__section">
+          <h2 class="usage-guide-modal__h1">How to Use?</h2>
+          <h3 class="usage-guide-modal__h2">开始使用</h3>
+          <p>在右上角输入框输入书名，按回车或点击 ➤ 提交。</p>
+          <p>如果你知道作者，可以一起输入，用空格隔开，这样可以避免 AI 猜错作者名。</p>
+          <p>AI 会自动识别这本书属于 Culture Journey 还是 Idea Galaxy，通常只需几秒钟。</p>
+          <h3 class="usage-guide-modal__h2">Culture Journey</h3>
+          <p>点击地图上已点亮的国家，右侧书单会跳转到对应卡片。</p>
+          <p>点击右侧国家卡片，地图会定位到该国。</p>
+          <p>左键点击书名，跳转豆瓣搜索页。</p>
+          <p>右键点击书名，可以编辑书名、作者、添加笔记链接，或删除这条记录。</p>
+          <h3 class="usage-guide-modal__h2">Idea Galaxy</h3>
+          <p>节点大小代表这个框架或概念被提取的次数，出现越多越大。</p>
+          <p>点击节点，显示与它相关的连线。</p>
+          <p>点击空白区域，收起连线。</p>
+          <p>左键点击右侧书名，跳转豆瓣。</p>
+          <p>右键可编辑或删除。</p>
+          <p>地图和星系图均支持滚轮缩放与拖拽平移。</p>
+        </section>
+      </div>
+    </div>
+  </div>
+
+  <script src="country-normalize.js"></script>
+  <script src="country-names.js"></script>
+  <script src="country-centers.js"></script>
+  <script src="idea-book-utils.js"></script>
+  <script src="problem-domain-links.js"></script>
+  <script src="cluster-data-fixes.js"></script>
+  <script src="cluster-backfill.js"></script>
+  <script src="concept-links.js"></script>
+  <script src="culture-map.js"></script>
+  <script src="galaxy-sidebar.js"></script>
+  <script src="galaxy-graph.js"></script>
+  <script src="panel-resizer.js"></script>
+  <script src="app.js"></script>
+  <script src="culture-sidebar.js"></script>
+</body>
+</html>
