@@ -240,20 +240,32 @@ ${IDEA_FIELDS_GUIDANCE}
     );
   }
 
-  /** 最后一个空格前为书名，后为作者（可选） */
-  function parseBookInput(raw) {
+  const PARSE_INPUT_PROMPT =
+    "用户输入了一本书的信息，请判断并分离书名和作者名。\n" +
+    "规则：\n" +
+    "1. 如果能识别出明确的书名和作者名，返回：{\"title\":\"书名\",\"author\":\"作者名\"}\n" +
+    "2. 如果只有书名没有作者，返回：{\"title\":\"书名\",\"author\":\"\"}\n" +
+    "3. 书名保持原文，不要翻译\n" +
+    "只返回JSON，不要其他文字。";
+
+  async function parseBookInputWithAI(raw) {
     const trimmed = String(raw || "").trim();
     if (!trimmed) return { title: "", author: "" };
 
-    const lastSpace = trimmed.lastIndexOf(" ");
-    if (lastSpace === -1) {
-      return { title: trimmed, author: "" };
+    try {
+      const { content } = await callDeepSeekChat(
+        PARSE_INPUT_PROMPT,
+        `用户输入：${trimmed}`
+      );
+      const parsed = parseAIJson(content);
+      const title = String(parsed?.title ?? "").trim();
+      const author = String(parsed?.author ?? "").trim();
+      if (title) return { title, author };
+    } catch (err) {
+      console.warn("[Reading Cosmos] 书名预处理失败，回退到原始输入:", err);
     }
 
-    return {
-      title: trimmed.slice(0, lastSpace).trim(),
-      author: trimmed.slice(lastSpace + 1).trim(),
-    };
+    return { title: trimmed, author: "" };
   }
 
   function buildAnalysisUserMessage(title, userAuthor) {
@@ -611,8 +623,8 @@ ${IDEA_FIELDS_GUIDANCE}
   async function handleBookSubmit() {
     if (!bookInput || bookInput.disabled) return;
 
-    const { title, author: userAuthor } = parseBookInput(bookInput.value);
-    if (!title) {
+    const rawInput = bookInput.value.trim();
+    if (!rawInput) {
       showInlineFeedback("请输入书名");
       return;
     }
@@ -623,15 +635,36 @@ ${IDEA_FIELDS_GUIDANCE}
       return;
     }
 
-    if (isDuplicateBookTitle(title)) {
-      showDuplicateBookFeedback();
-      return;
-    }
-
     bookInput.disabled = true;
     if (bookSubmit) bookSubmit.disabled = true;
     bookInput.classList.add("is-busy");
     showStatusAnalyzing();
+
+    let title, userAuthor;
+    try {
+      ({ title, author: userAuthor } = await parseBookInputWithAI(rawInput));
+    } catch (err) {
+      title = rawInput;
+      userAuthor = "";
+    }
+
+    if (!title) {
+      bookInput.disabled = false;
+      if (bookSubmit) bookSubmit.disabled = false;
+      bookInput.classList.remove("is-busy");
+      hideStatusToast();
+      showInlineFeedback("请输入书名");
+      return;
+    }
+
+    if (isDuplicateBookTitle(title)) {
+      bookInput.disabled = false;
+      if (bookSubmit) bookSubmit.disabled = false;
+      bookInput.classList.remove("is-busy");
+      hideStatusToast();
+      showDuplicateBookFeedback();
+      return;
+    }
 
     try {
       const { payload, content } = await callDeepSeek(title, userAuthor);
