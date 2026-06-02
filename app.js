@@ -64,6 +64,16 @@ idea 路由${IDEA_FIELDS_GUIDANCE}
 作者名规则：若用户消息中已明确提供作者名，JSON 的 author 必须原样使用该作者名，不要修改或猜测。若用户未提供作者名，请根据书名推断作者中文名填入 author，不要填「未知」或留空。
 只返回 JSON，不要任何其他文字。`;
 
+  const CULTURE_EXTRACTION_PROMPT = `你是一个书籍文化归属分析助手。用户已确认该书属于 culture 类型（文化旅行），请提取文化归属信息，不要判断 route。
+
+${CULTURE_COUNTRY_GUIDANCE}
+
+返回格式（只返回 JSON，不要任何其他文字）：
+{"route":"culture","author":"作者中文名","country":"英文国家名","region":"英文大区名"}
+
+作者名规则：若用户消息中已明确提供作者名，JSON 的 author 必须原样使用该作者名，不要修改或猜测。若用户未提供作者名，请根据书名推断作者中文名填入 author，不要填「未知」或留空。
+只返回 JSON，不要任何其他文字。`;
+
   const IDEA_EXTRACTION_PROMPT = `你是一个书籍思想框架分析助手。用户已确认该书属于 idea 类型（思想星系），请提取分析框架与可迁移概念，不要判断 route。
 
 ${IDEA_FIELDS_GUIDANCE}
@@ -338,6 +348,52 @@ ${IDEA_FIELDS_GUIDANCE}
     delete book.region;
   }
 
+  function stripIdeaFieldsFromBook(book) {
+    delete book.cluster;
+    delete book.framework;
+    delete book.concepts;
+    delete book.problem_domain;
+    delete book.related_frameworks;
+  }
+
+  function applyCultureFieldsToBook(book, cultureFields) {
+    book.route = "culture";
+    book.author = cultureFields.author;
+    book.country = cultureFields.country;
+    book.region = cultureFields.region;
+    stripIdeaFieldsFromBook(book);
+  }
+
+  function conceptKeyForCleanup(name) {
+    if (window.ReadingCosmosIdeaBook?.conceptKey) {
+      return ReadingCosmosIdeaBook.conceptKey(name);
+    }
+    return String(name || "")
+      .trim()
+      .toLowerCase();
+  }
+
+  function removeOrphanConceptLinks(labels) {
+    if (!window.ReadingCosmosConceptLinks?.removeLinksForConcept) return;
+
+    const books = loadBooks();
+    labels.forEach((label) => {
+      const key = conceptKeyForCleanup(label);
+      if (!key) return;
+
+      const stillUsed = books.some(
+        (b) =>
+          b.route === "idea" &&
+          Array.isArray(b.concepts) &&
+          b.concepts.some((c) => conceptKeyForCleanup(c) === key)
+      );
+
+      if (!stillUsed) {
+        ReadingCosmosConceptLinks.removeLinksForConcept(label);
+      }
+    });
+  }
+
   function refreshCultureAndGalaxy(options = {}) {
     if (window.ReadingCosmosMap?.refreshMapData) {
       ReadingCosmosMap.refreshMapData();
@@ -476,6 +532,11 @@ ${IDEA_FIELDS_GUIDANCE}
     return callDeepSeekChat(IDEA_EXTRACTION_PROMPT, userMessage);
   }
 
+  async function callDeepSeekCultureExtract(title, userAuthor) {
+    const userMessage = buildAnalysisUserMessage(title, userAuthor);
+    return callDeepSeekChat(CULTURE_EXTRACTION_PROMPT, userMessage);
+  }
+
   async function convertCultureBookToIdea(addedAt) {
     if (DEEPSEEK_API_KEY === "YOUR_API_KEY") {
       throw new Error("请先在 app.js 中配置 API Key");
@@ -501,6 +562,45 @@ ${IDEA_FIELDS_GUIDANCE}
 
       showStatusSuccess(book.title, "idea");
       refreshCultureAndGalaxy({ highlightNew: true });
+      return book;
+    } catch (err) {
+      hideStatusToast();
+      throw err;
+    }
+  }
+
+  async function convertIdeaBookToCulture(addedAt) {
+    if (DEEPSEEK_API_KEY === "YOUR_API_KEY") {
+      throw new Error("请先在 app.js 中配置 API Key");
+    }
+
+    const books = loadBooks();
+    const book = books.find((b) => b.addedAt === addedAt);
+    if (!book) {
+      throw new Error("未找到该书籍");
+    }
+    if (book.route === "culture") {
+      return book;
+    }
+
+    const userAuthor = String(book.author ?? "").trim();
+    const formerConcepts = Array.isArray(book.concepts) ? [...book.concepts] : [];
+
+    showStatusAnalyzing();
+
+    try {
+      const { content } = await callDeepSeekCultureExtract(book.title, userAuthor);
+      const parsed = normalizeResult(parseAIJson(content), { userAuthor });
+      if (parsed.route !== "culture") {
+        throw new Error("AI 未返回 culture 路由数据");
+      }
+
+      applyCultureFieldsToBook(book, parsed);
+      saveBooks(books);
+      removeOrphanConceptLinks(formerConcepts);
+
+      showStatusSuccess(book.title, "culture");
+      refreshCultureAndGalaxy();
       return book;
     } catch (err) {
       hideStatusToast();
@@ -584,6 +684,7 @@ ${IDEA_FIELDS_GUIDANCE}
 
   window.ReadingCosmosBooks = {
     convertCultureBookToIdea,
+    convertIdeaBookToCulture,
     backfillAllClusters:
       window.ReadingCosmosClusterBackfill?.backfillAllClusters,
     showInlineFeedback,

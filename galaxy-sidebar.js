@@ -322,6 +322,14 @@
       <input id="galaxy-book-edit-author" class="culture-book-panel__input" type="text" placeholder="作者名" />
       <label class="culture-book-panel__field-label" for="galaxy-book-edit-note-url">笔记链接（可选）</label>
       <input id="galaxy-book-edit-note-url" class="culture-book-panel__input" type="text" placeholder="" />
+      <label class="culture-book-panel__field-label" for="galaxy-book-edit-cluster">议题群落</label>
+      <input id="galaxy-book-edit-cluster" class="culture-book-panel__input" type="text" placeholder="议题群落" />
+      <p class="culture-book-panel__hint">如 AI 归类有误可在此手动修改</p>
+      <label class="culture-book-panel__field-label" for="galaxy-book-edit-route">归类</label>
+      <select id="galaxy-book-edit-route" class="culture-book-panel__select">
+        <option value="idea">🌌 思想星系</option>
+        <option value="culture">🌍 文化旅行</option>
+      </select>
       <div class="culture-book-panel__edit-actions">
         <button type="button" id="galaxy-book-confirm-btn" class="culture-book-panel__btn">确认</button>
         <button type="button" id="galaxy-book-cancel-btn" class="culture-book-panel__btn culture-book-panel__btn--ghost">取消</button>
@@ -332,6 +340,8 @@
     const titleInput = bookEditPanelEl.querySelector("#galaxy-book-edit-title");
     const authorInput = bookEditPanelEl.querySelector("#galaxy-book-edit-author");
     const noteInput = bookEditPanelEl.querySelector("#galaxy-book-edit-note-url");
+    const clusterInput = bookEditPanelEl.querySelector("#galaxy-book-edit-cluster");
+    const routeSelect = bookEditPanelEl.querySelector("#galaxy-book-edit-route");
     const confirmBtn = bookEditPanelEl.querySelector("#galaxy-book-confirm-btn");
     const cancelBtn = bookEditPanelEl.querySelector("#galaxy-book-cancel-btn");
 
@@ -341,25 +351,53 @@
       hideEditPanels();
     };
 
-    confirmBtn.onclick = (event) => {
+    confirmBtn.onclick = async (event) => {
       event.preventDefault();
       event.stopPropagation();
 
       const newTitle = titleInput.value.trim();
       const newAuthor = authorInput.value.trim();
       const newNoteUrl = noteInput.value.trim();
-      if (!newTitle || !activeBookAddedAt) return;
+      const newCluster = clusterInput?.value.trim() ?? "";
+      const newRoute = routeSelect?.value || "idea";
+      const addedAt = activeBookAddedAt;
+      if (!newTitle || !addedAt) return;
 
-      updateIdeaBook(activeBookAddedAt, {
+      const bookBefore = findBook(addedAt);
+      const wasIdea = bookBefore?.route === "idea";
+
+      updateIdeaBook(addedAt, {
         title: newTitle,
         author: newAuthor,
         noteUrl: newNoteUrl,
+        cluster: newRoute === "idea" ? newCluster : undefined,
       });
       hideEditPanels();
+
+      if (newRoute === "culture" && wasIdea) {
+        if (!window.ReadingCosmosBooks?.convertIdeaBookToCulture) {
+          showRouteChangeError("归类功能未加载，请刷新页面后重试");
+          refreshAfterRouteChange();
+          return;
+        }
+
+        setBookEditPanelBusy(true);
+        try {
+          await ReadingCosmosBooks.convertIdeaBookToCulture(addedAt);
+        } catch (err) {
+          console.error("[Idea Galaxy] 转为文化旅行失败:", err);
+          showRouteChangeError(err.message || "转为文化旅行失败，请重试");
+          refreshAfterRouteChange();
+        } finally {
+          setBookEditPanelBusy(false);
+        }
+        return;
+      }
+
       refreshGalaxy();
     };
 
-    [titleInput, authorInput, noteInput].forEach((input) => {
+    [titleInput, authorInput, noteInput, clusterInput].forEach((input) => {
       input.addEventListener("keydown", (e) => {
         if (e.key === "Enter") {
           e.preventDefault();
@@ -467,6 +505,20 @@
     panel.querySelector("#galaxy-book-edit-author").value = bookAuthor(book);
     panel.querySelector("#galaxy-book-edit-note-url").value = bookNoteUrl(book);
 
+    const clusterInput = panel.querySelector("#galaxy-book-edit-cluster");
+    if (clusterInput) {
+      clusterInput.value = bookClusterLabel(book);
+    }
+
+    const routeSelect = panel.querySelector("#galaxy-book-edit-route");
+    if (routeSelect) {
+      routeSelect.value = book.route === "culture" ? "culture" : "idea";
+      routeSelect.disabled = false;
+    }
+
+    const confirmBtn = panel.querySelector("#galaxy-book-confirm-btn");
+    if (confirmBtn) confirmBtn.disabled = false;
+
     if (bookEditPanelEl) {
       bookEditPanelEl.hidden = false;
       bookEditPanelEl.style.display = "flex";
@@ -515,7 +567,7 @@
     });
   }
 
-  function updateIdeaBook(addedAt, { title, author, noteUrl }) {
+  function updateIdeaBook(addedAt, { title, author, noteUrl, cluster }) {
     const books = loadBooks();
     const book = books.find((b) => b.addedAt === addedAt);
     if (!book) return;
@@ -523,7 +575,47 @@
     book.title = title;
     book.author = author;
     book.noteUrl = String(noteUrl ?? "").trim();
+    if (cluster !== undefined && book.route === "idea") {
+      book.cluster = String(cluster ?? "").trim();
+    }
     saveBooks(books);
+  }
+
+  function showRouteChangeError(message) {
+    if (window.ReadingCosmosBooks?.showInlineFeedback) {
+      ReadingCosmosBooks.showInlineFeedback(message);
+      return;
+    }
+    console.warn("[Idea Galaxy]", message);
+  }
+
+  function setBookEditPanelBusy(busy) {
+    const panel = bookEditPanelEl;
+    const confirmBtn = panel?.querySelector("#galaxy-book-confirm-btn");
+    const cancelBtn = panel?.querySelector("#galaxy-book-cancel-btn");
+    const routeSelect = panel?.querySelector("#galaxy-book-edit-route");
+    const clusterInput = panel?.querySelector("#galaxy-book-edit-cluster");
+    [
+      confirmBtn,
+      cancelBtn,
+      routeSelect,
+      clusterInput,
+      panel?.querySelector("#galaxy-book-edit-title"),
+      panel?.querySelector("#galaxy-book-edit-author"),
+      panel?.querySelector("#galaxy-book-edit-note-url"),
+    ].forEach((el) => {
+      if (el) el.disabled = busy;
+    });
+  }
+
+  function refreshAfterRouteChange() {
+    if (window.ReadingCosmosMap?.refreshMapData) {
+      ReadingCosmosMap.refreshMapData();
+    }
+    refreshGalaxy();
+    if (window.ReadingCosmosGalaxySidebar?.refresh) {
+      ReadingCosmosGalaxySidebar.refresh();
+    }
   }
 
   function deleteIdeaBook(addedAt) {
