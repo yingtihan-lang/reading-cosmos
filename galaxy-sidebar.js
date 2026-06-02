@@ -736,7 +736,10 @@
         const addedAt = escapeHtml(book.addedAt);
         const href = escapeHtml(doubanSearchUrl(book.title));
         const titleLabel = formatBookTitleLabel(book);
-        const cluster = escapeHtml(bookClusterLabel(book));
+        const problemDomainRaw = bookProblemDomain(book);
+        const problemDomain = problemDomainRaw
+          ? escapeHtml(problemDomainRaw)
+          : "";
         const framework = escapeHtml(bookFramework(book));
         const conceptItems = Array.isArray(book.concepts) ? book.concepts : [];
         const concepts = conceptItems
@@ -771,7 +774,11 @@
               title="豆瓣搜索"
             >${titleLabel}</a>
           </h4>
-          <p class="galaxy-book-card__meta galaxy-book-card__meta--cluster">议题群落：${cluster || "—"}</p>
+          ${
+            problemDomain
+              ? `<p class="galaxy-book-card__meta galaxy-book-card__meta--domain">问题域：${problemDomain}</p>`
+              : ""
+          }
           <p class="galaxy-book-card__meta galaxy-book-card__meta--framework">框架：${framework || "—"}</p>
           <ul class="galaxy-book-card__concepts">${concepts || '<li class="galaxy-concepts__empty">（无概念）</li>'}</ul>
         </article>`;
